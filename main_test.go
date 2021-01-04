@@ -165,4 +165,11 @@ func TestGlobalFlags(t *testing.T) {
 
 }
 
+func TestVersionCommand(t *testing.T) {
+	t.Run("global flags are printed separately", func(t *testing.T) {
+		out, _ := exec.Command("sh", "-c", "example-cli version").CombinedOutput()
+		t.Log(string(out))
+		assert.Contains(t, string(out), "1.0.0")
+	})
+}
 
