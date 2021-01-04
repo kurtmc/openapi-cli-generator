@@ -55,9 +55,9 @@ func getBody(r io.ReadCloser) (string, io.ReadCloser, error) {
 }
 
 // UserAgentMiddleware sets the user-agent header on requests.
-func UserAgentMiddleware() {
+func UserAgentMiddleware(appName string) {
 	Client.UseRequest(func(ctx *context.Context, h context.Handler) {
-		ctx.Request.Header.Set("User-Agent", viper.GetString("app-name")+"-cli-"+Root.Version)
+		ctx.Request.Header.Set("User-Agent", fmt.Sprintf("%s-cli-%s", appName, Root.Version))
 		h.Next(ctx)
 	})
 }

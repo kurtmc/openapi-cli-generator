@@ -45,6 +45,7 @@ type Config struct {
 	AppName   string
 	EnvPrefix string
 	Version   string
+	UserAgentName string
 }
 
 // Init will set up the CLI.
@@ -69,7 +70,7 @@ func Init(config *Config) {
 	log.Logger = log.Output(ConsoleWriter{Out: Stderr, NoColor: !tty}).With().Caller().Logger()
 
 	Client = gentleman.New()
-	UserAgentMiddleware()
+	UserAgentMiddleware(config.AppName)
 	LogMiddleware(tty)
 
 	Formatter = NewDefaultFormatter(tty)
