@@ -101,7 +101,7 @@ func (c CLI) ZeroLogLevel() zerolog.Level {
 	case VerbosityTypeDebug:
 		return zerolog.DebugLevel
 	}
-	return zerolog.GlobalLevel()
+	return zerolog.WarnLevel
 }
 
 type AuthServer struct {
