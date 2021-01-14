@@ -44,8 +44,8 @@ func (tp TokenPayload) ExpiresAt() time.Time {
 		return time.Time{}
 	}
 	claims, _ := token.Claims.(jwt.MapClaims)
-	iat, _ := claims["iat"].(int)
-	return time.Unix(int64(iat), 0)
+	exp, _ := claims["exp"].(float64)
+	return time.Unix(int64(exp), 0)
 }
 
 func (tp TokenPayload) Issuer() string {
