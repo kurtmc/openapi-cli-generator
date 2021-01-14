@@ -65,7 +65,10 @@ func getOauth2Token(source oauth2.TokenSource, log *zerolog.Logger) (token *oaut
 	var cached *oauth2.Token
 
 	credentials := cli.RunConfig.GetCredentials()
-	expiry := credentials.TokenPayload.ExpiresAt()
+	expiry, err := credentials.TokenPayload.ExpiresAt()
+	if err != nil {
+		return
+	}
 	if !expiry.IsZero() {
 		log.Debug().Msg("Loading token from cache.")
 		cached = &oauth2.Token{

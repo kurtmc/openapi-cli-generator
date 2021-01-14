@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -57,7 +58,10 @@ func getBody(r io.ReadCloser) (string, io.ReadCloser, error) {
 // UserAgentMiddleware sets the user-agent header on requests.
 func UserAgentMiddleware(appName string) {
 	Client.UseRequest(func(ctx *context.Context, h context.Handler) {
-		ctx.Request.Header.Set("User-Agent", fmt.Sprintf("%s-cli-%s", appName, Root.Version))
+		userAgent := fmt.Sprintf("%s-cli/%s (%s; %s)",
+			appName, Root.Version,
+			runtime.GOOS, runtime.GOARCH)
+		ctx.Request.Header.Set("User-Agent", userAgent)
 		h.Next(ctx)
 	})
 }

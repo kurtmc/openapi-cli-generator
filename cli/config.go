@@ -38,14 +38,18 @@ func (tp TokenPayload) ToMap() map[string]interface{} {
 	return m
 }
 
-func (tp TokenPayload) ExpiresAt() time.Time {
+func (tp TokenPayload) ExpiresAt() (time.Time, error) {
 	token, _, _ := new(jwt.Parser).ParseUnverified(tp.AccessToken, jwt.MapClaims{})
 	if token == nil {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	claims, _ := token.Claims.(jwt.MapClaims)
-	exp, _ := claims["exp"].(float64)
-	return time.Unix(int64(exp), 0)
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		err := fmt.Errorf("expected float64 for exp claim, received %q", reflect.TypeOf(claims["exp"]))
+		return time.Time{}, err
+	}
+	return time.Unix(int64(exp), 0), nil
 }
 
 func (tp TokenPayload) Issuer() string {
