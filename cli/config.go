@@ -129,14 +129,15 @@ type Profile struct {
 }
 
 type Settings struct {
-	DefaultProfileName string                `mapstructure:"default_profile_name"`
+	// ProfileName will be read from settings.toml default_profile_name,
+	// then the %envPrefix%_PROFILE_NAME, and then the --profile-name global flag.
+	ProfileName string                `mapstructure:"default_profile_name"`
 	Profiles           map[string]Profile    `mapstructure:"profiles"`
 	AuthServers        map[string]AuthServer `mapstructure:"auth_servers"`
 	viper              *viper.Viper
 }
 
 type ClientConfiguration struct {
-	ProfileName  string   `mapstructure:"profile_name"`
 	Secrets      Secrets  `mapstructure:"secrets"`
 	Settings     Settings `mapstructure:"settings"`
 	secretsPath  string
@@ -145,7 +146,7 @@ type ClientConfiguration struct {
 }
 
 func (cc ClientConfiguration) GetProfile() Profile {
-	return cc.Settings.Profiles[cc.ProfileName]
+	return cc.Settings.Profiles[cc.Settings.ProfileName]
 }
 
 func (cc ClientConfiguration) GetAuthServer() AuthServer {
@@ -269,7 +270,6 @@ func LoadConfiguration(envPrefix, settingsFilePath, secretsFilePath string, glob
 	if err != nil {
 		return
 	}
-	config.ProfileName = config.Settings.DefaultProfileName
 
 	return
 }
@@ -341,7 +341,7 @@ func buildSettingsAddAuthServerCommand() (cmd *cobra.Command) {
 		Short: "Add a new authentication server",
 		Args:  cobra.ExactArgs(1),
 		Run:  func(cmd *cobra.Command, args []string) {
-			logger := log.With().Str("profile", RunConfig.ProfileName).Logger()
+			logger := log.With().Str("profile", RunConfig.Settings.ProfileName).Logger()
 
 			authServerName := strings.Replace(args[0], ".", "-", -1)
 			_, exists := RunConfig.Settings.AuthServers[authServerName]

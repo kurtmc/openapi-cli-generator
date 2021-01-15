@@ -53,7 +53,7 @@ func Scopes(scopes ...string) func(*config) error {
 func TokenMiddleware(source oauth2.TokenSource, ctx *context.Context, h context.Handler) {
 	// Setup logger with the current profile.
 	log := ctx.Get("log").(*zerolog.Logger).
-		With().Str("profileName", cli.RunConfig.Settings.DefaultProfileName).Logger()
+		With().Str("profileName", cli.RunConfig.Settings.ProfileName).Logger()
 
 	if err := TokenHandler(source, &log, ctx.Request); err != nil {
 		h.Error(ctx, err)

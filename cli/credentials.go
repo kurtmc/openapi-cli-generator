@@ -58,7 +58,7 @@ func buildSecretsAddCredentialsCommand() (cmd *cobra.Command) {
 		Short: "Add a new set of credentials",
 		Args:  cobra.ExactArgs(1),
 		Run:  func(cmd *cobra.Command, args []string) {
-			logger := log.With().Str("profile", RunConfig.ProfileName).Logger()
+			logger := log.With().Str("profile", RunConfig.Settings.ProfileName).Logger()
 
 			credentialName := strings.Replace(args[0], ".", "-", -1)
 			_, exists := RunConfig.Secrets.Credentials[credentialName]
