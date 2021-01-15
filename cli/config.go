@@ -156,9 +156,9 @@ func (cc ClientConfiguration) GetCredentials() Credentials {
 	return cc.Secrets.Credentials[cc.GetProfile().CredentialsName]
 }
 
-func (cc *ClientConfiguration) bindGlobalFlags() (err error) {
+func (cc *ClientConfiguration) bindGlobalFlags(envPrefix string) (err error) {
 	for _, globalFlag := range cc.globalFlags {
-		err = globalFlag.bindFlag(cc.Settings.viper, cc.Settings)
+		err = globalFlag.bindFlag(cc.Settings.viper, envPrefix, cc.Settings)
 		if err != nil {
 			return
 		}
@@ -173,20 +173,16 @@ func (cc *ClientConfiguration) bindGlobalFlags() (err error) {
 	return
 }
 
-func loadSecrets(envPrefix, secretsFilePath string) (secrets Secrets, err error) {
+func loadSecrets(secretsFilePath string) (secrets Secrets, err error) {
 	touchFile(secretsFilePath)
 
 	v := viper.New()
-
-	v.SetEnvPrefix(fmt.Sprintf("%s_SECRETS", envPrefix))
 
 	v.SetConfigFile(secretsFilePath)
 	err = v.ReadInConfig()
 	if err != nil {
 		return
 	}
-
-	v.AutomaticEnv()
 
 	err = v.Unmarshal(&secrets)
 	if err != nil {
@@ -200,20 +196,16 @@ func loadSecrets(envPrefix, secretsFilePath string) (secrets Secrets, err error)
 	return secrets, nil
 }
 
-func loadSettings(envPrefix, settingsFilePath string) (settings Settings, err error) {
+func loadSettings(settingsFilePath string) (settings Settings, err error) {
 	touchFile(settingsFilePath)
 
 	v := viper.New()
-
-	v.SetEnvPrefix(fmt.Sprintf("%s_SETTINGS", envPrefix))
 
 	v.SetConfigFile(settingsFilePath)
 	err = v.ReadInConfig()
 	if err != nil {
 		return
 	}
-
-	v.AutomaticEnv()
 
 	err = v.Unmarshal(&settings)
 	if err != nil {
@@ -255,12 +247,12 @@ func InitConfiguration(envPrefix, settingsFilePath, secretsFilePath string, glob
 // LoadConfiguration loads secret and settings files. It will additional override those persisted values
 // with (1) environment variables and (2) flag values (in order of increasing precedence).
 func LoadConfiguration(envPrefix, settingsFilePath, secretsFilePath string, globalFlags []GlobalFlag) (config ClientConfiguration, err error) {
-	secrets, err := loadSecrets(envPrefix, secretsFilePath)
+	secrets, err := loadSecrets(secretsFilePath)
 	if err != nil {
 		return
 	}
 
-	settings, err := loadSettings(envPrefix, settingsFilePath)
+	settings, err := loadSettings(settingsFilePath)
 	if err != nil {
 		return
 	}
@@ -273,7 +265,7 @@ func LoadConfiguration(envPrefix, settingsFilePath, secretsFilePath string, glob
 		globalFlags: globalFlags,
 	}
 
-	err = config.bindGlobalFlags()
+	err = config.bindGlobalFlags(envPrefix)
 	if err != nil {
 		return
 	}
@@ -335,7 +327,7 @@ func BuildSettingsCommands() (configCommand *cobra.Command) {
 	configCommand.AddCommand(
 		buildSettingsAddAuthServerCommand(),
 		buildSettingsListAuthServersCommand(),
-		buildSettingsGetCommand(), 
+		buildSettingsGetCommand(),
 		buildSettingsSetCommand())
 
 	return

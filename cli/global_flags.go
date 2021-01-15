@@ -143,13 +143,13 @@ func (gf GlobalFlag) getBindPaths(args ...interface{}) (paths []string, err erro
 	return
 }
 
-func (gf GlobalFlag) bindFlag(v *viper.Viper, args ...interface{}) (err error) {
+func (gf GlobalFlag) bindFlag(v *viper.Viper, envPrefix string, args ...interface{}) (err error) {
 	paths, err := gf.getBindPaths(args...)
 	if err != nil {
 		return
 	}
 	for _, p := range paths {
-		err = gf.bindFlagTo(v, p)
+		err = gf.bindFlagTo(v, p, envPrefix)
 		if err != nil {
 			return
 		}
@@ -160,8 +160,9 @@ func (gf GlobalFlag) bindFlag(v *viper.Viper, args ...interface{}) (err error) {
 // bindFlagTo binds the global flag and an un-nested representation of it as
 // an environment variable to all deeply nested viper paths (ie to values in
 // all profiles).
-func (gf GlobalFlag) bindFlagTo(v *viper.Viper, viperBindPath string) error {
-	err := v.BindEnv(viperBindPath, strings.ToUpper(gf.Name))
+func (gf GlobalFlag) bindFlagTo(v *viper.Viper, viperBindPath, envPrefix string) error {
+	envVar := fmt.Sprintf("%s_%s", envPrefix, strings.ReplaceAll(strings.ToUpper(gf.Name), "-", "_"))
+	err := v.BindEnv(viperBindPath, envVar)
 	if err != nil {
 		return err
 	}
