@@ -112,7 +112,7 @@ $flags.
 
 ## Environment Variables
 
-For each of the global flags listed above, you can set an environment variable prefixed with ¬$APP_SETTINGS¬, capitalized, and separated by an underscore rather than a dash. For example, setting ¬$APP_SETTINGS_VERBOSITY=info¬ is equivalent to passing ¬--verbosity info¬ to the command.
+For each of the global flags listed above, you can set an environment variable prefixed with ¬$APP¬, capitalized, and separated by an underscore rather than a dash. For example, setting ¬$APP_VERBOSITY=info¬ is equivalent to passing ¬--verbosity info¬ to the command.
 
 ## Configuration Files
 
