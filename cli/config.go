@@ -104,8 +104,9 @@ func (c CLI) ZeroLogLevel() zerolog.Level {
 		return zerolog.InfoLevel
 	case VerbosityTypeDebug:
 		return zerolog.DebugLevel
+	default:
+		return zerolog.WarnLevel
 	}
-	return zerolog.WarnLevel
 }
 
 type AuthServer struct {
@@ -431,7 +432,7 @@ func runConfig(filePath string, topLevel interface{}, args []string) {
 func buildSettingsGetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "get",
-		Short: "Get a value from settings.toml",
+		Short: `Get a value from settings.toml using a "." separated path.`,
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig(RunConfig.settingsPath, RunConfig.Settings, args)
@@ -442,7 +443,7 @@ func buildSettingsGetCommand() (cmd *cobra.Command) {
 func buildSettingsSetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "set",
-		Short: "Set a value in settings.toml",
+		Short: "Set a value in settings.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig(RunConfig.settingsPath, RunConfig.Settings, args)

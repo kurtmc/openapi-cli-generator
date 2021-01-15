@@ -45,6 +45,7 @@ type GlobalFlagDefaults struct {
 	CredentialsName string
 	ApiURL          string
 	OutputFormat    string
+	Verbosity string
 	Raw             bool
 }
 
@@ -54,6 +55,7 @@ func NewGlobalFlagDefaults(apiURL string) GlobalFlagDefaults {
 		AuthServerName:  "default",
 		CredentialsName: "default",
 		OutputFormat:    "json",
+		Verbosity: "warn",
 		ApiURL:          apiURL,
 	}
 }
@@ -68,7 +70,8 @@ func MakeAndParseGlobalFlags(defaults GlobalFlagDefaults) (globalFlags []GlobalF
 	flagSet.String("auth-server-name", defaults.AuthServerName, "")
 	flagSet.String("credentials-name", defaults.CredentialsName, "")
 	flagSet.String("api-url", defaults.ApiURL, "")
-	flagSet.StringP("output-format", "o", defaults.OutputFormat, "Output format [json, yaml]")
+	flagSet.String("verbosity", defaults.Verbosity, "Log verbosity [fatal error warn info debug]")
+	flagSet.StringP("output-format", "o", defaults.OutputFormat, "Output format [json yaml]")
 	flagSet.BoolP("help", "h", false, "")
 	flagSet.Bool("raw", defaults.Raw, "Output result of query as raw rather than an escaped JSON string or list")
 	err = flagSet.Parse(os.Args[1:])
@@ -98,6 +101,12 @@ func MakeAndParseGlobalFlags(defaults GlobalFlagDefaults) (globalFlags []GlobalF
 				return getBindPathsFromProfile("applications.cli.output_format", args...)
 			},
 			Flag: flagSet.Lookup("output-format"),
+		}, {
+			UseDefault: true,
+			customGetBindPaths: func(flagName string, args ...interface{}) ([]string, error) {
+				return getBindPathsFromProfile("applications.cli.verbosity", args...)
+			},
+			Flag: flagSet.Lookup("verbosity"),
 		},
 		/*{
 			TODO: Add this back - it should be globablly available as a flag but shouldn't read
@@ -148,7 +157,15 @@ func (gf GlobalFlag) bindFlag(v *viper.Viper, args ...interface{}) (err error) {
 	return
 }
 
+// bindFlagTo binds the global flag and an un-nested representation of it as
+// an environment variable to all deeply nested viper paths (ie to values in
+// all profiles).
 func (gf GlobalFlag) bindFlagTo(v *viper.Viper, viperBindPath string) error {
+	err := v.BindEnv(viperBindPath, strings.ToUpper(gf.Name))
+	if err != nil {
+		return err
+	}
+
 	if gf.Flag.Changed {
 		return v.BindPFlag(viperBindPath, gf.Flag)
 	}

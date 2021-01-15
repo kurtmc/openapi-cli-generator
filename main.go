@@ -622,6 +622,7 @@ func initCmd(cmd *cobra.Command, args []string, genOptions generateOptions) {
 		"AuthServerName": args[0],
 		"PackageName":    *genOptions.packageName,
 		"NameEnv":        strings.Replace(strings.ToUpper(args[0]), "-", "_", -1),
+		"Name":           strings.ToLower(args[0]),
 	}
 
 	var sb strings.Builder

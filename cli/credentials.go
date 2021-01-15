@@ -111,7 +111,7 @@ func buildSecretsListCredentialsCommand() (cmd *cobra.Command) {
 func buildSecretsGetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "get",
-		Short: "Get a value from secrets.toml",
+		Short: "Get a value from secrets.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig(RunConfig.secretsPath, RunConfig.Secrets, args)
@@ -123,7 +123,7 @@ func buildSecretsGetCommand() (cmd *cobra.Command) {
 func buildSecretsSetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "set",
-		Short: "Set a value in secrets.toml",
+		Short: "Set a value in secrets.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			runConfig(RunConfig.secretsPath, RunConfig.Secrets, args)

@@ -12,9 +12,9 @@ import (
 
 func main() {
 	config := &cli.Config{
-		AppName:   "<no value>",
-		EnvPrefix: "EXAMPLE",
+		AppName:   "example",
 		Version:   "1.0.0",
+		EnvPrefix: "EXAMPLE",
 	}
 	cli.Init(config)
 
@@ -31,7 +31,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cli.Root.AddCommand(cli.BuildSettingsCommands(), cli.BuildSecretsCommands(), cli.BuildVersionCommand())
+	cli.Root.AddCommand(
+		cli.BuildSettingsCommands(), cli.BuildSecretsCommands(),
+		cli.BuildHelpConfigCommand("example"), cli.BuildHelpInputCommand(),
+	)
 
 	cli.Root.PersistentFlags().AddFlagSet(globalFlagSet)
 

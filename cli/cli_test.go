@@ -6,45 +6,52 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
 // execute a command against the configured CLI
-func execute(cmd string) string {
+func execute(cmd string) (*bytes.Buffer, error) {
 	out := new(bytes.Buffer)
 	Root.SetArgs(strings.Split(cmd, " "))
 	Root.SetOutput(out)
 	Stdout = out
 	Stderr = out
-	Root.Execute()
-	return out.String()
-}
-
-func TestInit(t *testing.T) {
-	Client = nil
-	Root = nil
-
-	viper.Set("color", true)
-
+	err := Root.Execute()
+	return out, err
 }
 
 func TestHelpCommands(t *testing.T) {
 	Init(&Config{
 		AppName: "test",
+		Version: "1.0.0",
 	})
+	Root.AddCommand(
+		BuildHelpConfigCommand("test"), BuildHelpInputCommand(),
+	)
 
-	out := execute("help-config")
-	assert.Contains(t, out, "CLI ClientConfiguration")
+	out, err := execute("help-config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(out.String())
+	assert.Contains(t, out.String(), "CLI Configuration")
 
-	out = execute("help-input")
-	assert.Contains(t, out, "CLI Request Input")
+	out, err = execute("help-input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(out.String())
+	assert.Contains(t, out.String(), "CLI Request Input")
 }
 
 func TestPreRun(t *testing.T) {
 	Init(&Config{
 		AppName: "test",
+		Version: "1.0.0",
 	})
+	Root.AddCommand(
+		BuildHelpConfigCommand("test"), BuildHelpInputCommand(),
+	)
 
 	ran := false
 	PreRun = func(cmd *cobra.Command, args []string) error {
@@ -56,7 +63,10 @@ func TestPreRun(t *testing.T) {
 		// Do nothing, but also don't error.
 	}
 
-	execute("")
+	_, err := execute("")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	assert.True(t, ran)
 }

@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	colorable "github.com/mattn/go-colorable"
@@ -42,10 +41,9 @@ var tty bool
 
 // Config is used to pass settings to the CLI.
 type Config struct {
-	AppName   string
-	EnvPrefix string
-	Version   string
-	UserAgentName string
+	AppName       string
+	EnvPrefix     string
+	Version string
 }
 
 // Init will set up the CLI.
@@ -76,7 +74,7 @@ func Init(config *Config) {
 	Formatter = NewDefaultFormatter(tty)
 
 	Root = &cobra.Command{
-		Use:     filepath.Base(os.Args[0]),
+		Use: filepath.Base(os.Args[0]),
 		Version: config.Version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if PreRun != nil {
@@ -84,95 +82,78 @@ func Init(config *Config) {
 					return err
 				}
 			}
-
 			return nil
 		},
 	}
 
 	Root.SetOutput(Stdout)
-
-	Root.AddCommand(&cobra.Command{
-		Use:   "help-config",
-		Short: "Show CLI configuration help",
-		Run:   showHelpConfig,
-	})
-
-	Root.AddCommand(&cobra.Command{
-		Use:   "help-input",
-		Short: "Show CLI input help",
-		Run:   showHelpInput,
-	})
-
-}
-
-func userHomeDir() string {
-	if runtime.GOOS == "windows" {
-		home := os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
-		if home == "" {
-			home = os.Getenv("USERPROFILE")
-		}
-		return home
-	}
-	return os.Getenv("HOME")
 }
 
 var RunConfig ClientConfiguration
 
+func BuildHelpConfigCommand(appName string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "help-config",
+		Short: "Show CLI configuration help",
+		Run: func(cmd *cobra.Command, args []string) {
+			help := `# CLI Configuration
 
-func showHelpConfig(cmd *cobra.Command, args []string) {
-	help := `# CLI ClientConfiguration
+Configuration for the CLI comes from the following places:
 
-ClientConfiguration for the CLI comes from the following places:
-
-1. Command options
+1. Global flags
 2. Environment variables
-3. ClientConfiguration files
+3. Configuration files
 
-## Global Command Options
+## Global Flags
 
-Command options are passed when invoking the command. For example, ¬--verbose¬ configures the CLI to run with additional output for debugging. Using the top level ¬--help¬ to shows a list of available options:
+Command options are passed when invoking the command from the terminal. For any given command, invoking ¬--help¬ will display a set of "Global Flags" that can be used for that command:
 
-$flags
+$flags.
 
 ## Environment Variables
 
-Environment variables must be capitalized, prefixed with ¬$APP¬, and words are separated by an underscore rather than a dash. For example, setting ¬$APP_VERBOSE=1¬ is equivalent to passing ¬--verbose¬ to the command.
+For each of the global flags listed above, you can set an environment variable prefixed with ¬$APP_SETTINGS¬, capitalized, and separated by an underscore rather than a dash. For example, setting ¬$APP_SETTINGS_VERBOSITY=info¬ is equivalent to passing ¬--verbosity info¬ to the command.
 
-## ClientConfiguration Files
+## Configuration Files
 
-ClientConfiguration files can be used to configure the CLI and can be written using JSON, YAML, or TOML. The CLI searches in your home directory first (e.g. ¬$config-dir/config.json¬) and on Mac/Linux also looks in e.g. ¬/etc/$app/config.json¬. The following is equivalent to passing ¬--verbose¬ to the command:
+There are two files that the CLI will read for obtaining configuration values - ¬$config-dir/settings.toml¬ and ¬$config-dir/secrets.toml¬. The former contains a list of profiles with default values for non-sensitive configuration values, while the latter contains access and refresh tokens for making API calls. The following is equivalent to passing ¬--verbosity info¬ to the command:
 
-¬¬¬json
-{
-  "verbose": true
-}
+¬¬¬toml
+[profiles]
+[profiles.default]
+[profiles.default.applications]
+[profiles.default.applications.cli]
+verbosity = "info"
 ¬¬¬
 
-## Special Cases
-
-Some configuration values are not exposed as command options but can be set via prefixed environment variables or in configuration files. They are documented here.
-
-AuthServerName      | Type   | Description
---------- | ------ | -----------
-¬color¬   | ¬bool¬ | Force colorized output.
-¬nocolor¬ | ¬bool¬ | Disable colorized output.
+You may read and update these files using ¬$app settings¬ and ¬$app secrets¬ commands.
 `
 
-	help = strings.Replace(help, "¬", "`", -1)
-	help = strings.Replace(help, "$APP", strings.ToUpper(viper.GetString("app-name")), -1)
-	help = strings.Replace(help, "$app", viper.GetString("app-name"), -1)
-	help = strings.Replace(help, "$config-dir", viper.GetString("config-directory"), -1)
+			help = strings.Replace(help, "¬", "`", -1)
+			help = strings.Replace(help, "$APP", strings.ToUpper(appName), -1)
+			help = strings.Replace(help, "$app", appName, -1)
+			help = strings.Replace(help, "$config-dir", fmt.Sprintf("~/.%s", strings.ToLower(appName)), -1)
 
-	flags := make([]string, 0)
-	flags = append(flags, "AuthServerName            | Type     | Description")
-	flags = append(flags, "--------------- | -------- | -----------")
-	Root.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		flags = append(flags, fmt.Sprintf("%-15s", "`"+f.Name+"`")+" | `"+fmt.Sprintf("%-7s", f.Value.Type()+"`")+" | "+f.Usage)
-	})
+			flags := make([]string, 0)
+			flags = append(flags, "Flag                | Type     | Description")
+			flags = append(flags, "------------------- | -------- | -----------")
+			Root.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+				flags = append(flags, fmt.Sprintf("%-19s", "`"+f.Name+"`")+" | `"+fmt.Sprintf("%-7s", f.Value.Type()+"`")+" | "+f.Usage)
+			})
 
-	help = strings.Replace(help, "$flags", strings.Join(flags, "\n"), -1)
+			help = strings.Replace(help, "$flags", strings.Join(flags, "\n"), -1)
 
-	fmt.Fprintln(Stdout, Markdown(help))
+			fmt.Fprintln(Stdout, Markdown(help))
+		},
+	}
+}
+
+func BuildHelpInputCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "help-input",
+		Short: "Show CLI input help",
+		Run:   showHelpInput,
+	}
 }
 
 func showHelpInput(cmd *cobra.Command, args []string) {
