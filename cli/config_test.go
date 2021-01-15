@@ -9,7 +9,6 @@ import (
 
 func TestConfig(t *testing.T) {
 	clientConfiguration := ClientConfiguration{
-		ProfileName:  "john",
 		Secrets:      Secrets{
 			Credentials: map[string]Credentials{
 				"A": {
@@ -22,7 +21,7 @@ func TestConfig(t *testing.T) {
 			},
 		},
 		Settings:     Settings{
-			DefaultProfileName: "default",
+			ProfileName: "default",
 			Profiles:           map[string]Profile{
 				"tester": {
 					ApiURL: "https://api.dev.qcs.rigetti.com",
