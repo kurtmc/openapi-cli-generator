@@ -18,7 +18,9 @@ type BeforeHandlerFunc func(string, *viper.Viper, *gentleman.Request)
 type AfterHandlerFunc func(string, *viper.Viper, *gentleman.Response, interface{}) interface{}
 
 var beforeRegistry = make(map[string][]BeforeHandlerFunc)
+var beforeAllRegistry = make([]BeforeHandlerFunc, 0)
 var afterRegistry = make(map[string][]AfterHandlerFunc)
+var afterAllRegistry = make([]AfterHandlerFunc, 0)
 
 // RegisterBefore registers a pre-request handler for the given command path.
 // The handler may modify the request before it gets sent over the wire.
@@ -30,6 +32,10 @@ func RegisterBefore(path string, handler BeforeHandlerFunc) {
 	beforeRegistry[path] = append(beforeRegistry[path], handler)
 }
 
+func RegisterBeforeAll(handler BeforeHandlerFunc) {
+	beforeAllRegistry = append(beforeAllRegistry, handler)
+}
+
 // RegisterAfter registers a post-request handler for the given command path.
 // The handler may modify the unmarshalled response.
 func RegisterAfter(path string, handler AfterHandlerFunc) {
@@ -38,6 +44,10 @@ func RegisterAfter(path string, handler AfterHandlerFunc) {
 	}
 
 	afterRegistry[path] = append(afterRegistry[path], handler)
+}
+
+func RegisterAfterAll(handler AfterHandlerFunc) {
+	afterAllRegistry = append(afterAllRegistry, handler)
 }
 
 func commandPath(cmd *cobra.Command) string {
@@ -54,6 +64,9 @@ func commandPath(cmd *cobra.Command) string {
 
 // HandleBefore runs any registered pre-request handlers for the given command.
 func HandleBefore(path string, params *viper.Viper, r *gentleman.Request) {
+	for _, handler := range beforeAllRegistry {
+		handler(path, params, r)
+	}
 	if handlers, ok := beforeRegistry[path]; ok {
 		for _, handler := range handlers {
 			handler(path, params, r)
@@ -61,9 +74,12 @@ func HandleBefore(path string, params *viper.Viper, r *gentleman.Request) {
 	}
 }
 
-// HandleAfter runs any regeistered post-request handlers for the given command.
+// HandleAfter runs any registered post-request handlers for the given command.
 func HandleAfter(path string, params *viper.Viper, resp *gentleman.Response, data interface{}) interface{} {
 	tmp := data
+	for _, handler := range afterAllRegistry {
+		tmp = handler(path, params, resp, tmp)
+	}
 	if handlers, ok := afterRegistry[path]; ok {
 		for _, handler := range handlers {
 			tmp = handler(path, params, resp, tmp)

@@ -67,7 +67,10 @@ func getOauth2Token(source oauth2.TokenSource, log *zerolog.Logger) (token *oaut
 	credentials := cli.RunConfig.GetCredentials()
 	expiry, err := credentials.TokenPayload.ExpiresAt()
 	if err != nil {
-		return
+		log.Debug().Err(err).Msg("failed to parse claims expiration")
+		err = nil
+		// if parsing the token failed, log the failure, but treat the token
+		// as expired, so that we can refresh it below.
 	}
 	if !expiry.IsZero() {
 		log.Debug().Msg("Loading token from cache.")

@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
+	"gopkg.in/h2non/gentleman.v2"
 	"os"
 	"reflect"
 	"strings"
@@ -38,32 +39,33 @@ func (tp TokenPayload) ToMap() map[string]interface{} {
 	return m
 }
 
-func (tp TokenPayload) ExpiresAt() (time.Time, error) {
-	token, _, _ := new(jwt.Parser).ParseUnverified(tp.AccessToken, jwt.MapClaims{})
-	if token == nil {
-		return time.Time{}, nil
+func (tp TokenPayload) ParseClaimsUnverified() (jwt.MapClaims, error) {
+	token, _, err := new(jwt.Parser).ParseUnverified(tp.AccessToken, jwt.MapClaims{})
+	if err != nil {
+		return nil, err
 	}
-	claims, _ := token.Claims.(jwt.MapClaims)
+	if token == nil {
+		return nil, nil
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("failed to parse claims, found %T", token.Claims)
+	}
+
+	return claims, nil
+}
+
+func (tp TokenPayload) ExpiresAt() (time.Time, error) {
+	claims, err := tp.ParseClaimsUnverified()
+	if err != nil {
+		return time.Time{}, err
+	}
 	exp, ok := claims["exp"].(float64)
 	if !ok {
 		err := fmt.Errorf("expected float64 for exp claim, received %q", reflect.TypeOf(claims["exp"]))
 		return time.Time{}, err
 	}
 	return time.Unix(int64(exp), 0), nil
-}
-
-func (tp TokenPayload) Issuer() string {
-	token, _, _ := new(jwt.Parser).ParseUnverified(tp.AccessToken, jwt.MapClaims{})
-	claims, _ := token.Claims.(jwt.MapClaims)
-	iss := claims["iss"].(string)
-	return iss
-}
-
-func (tp TokenPayload) ClientID() string {
-	token, _, _ := new(jwt.Parser).ParseUnverified(tp.AccessToken, jwt.MapClaims{})
-	claims, _ := token.Claims.(jwt.MapClaims)
-	cid := claims["cid"].(string)
-	return cid
 }
 
 type Credentials struct {
@@ -125,6 +127,7 @@ type Profile struct {
 	ApiURL          string `mapstructure:"api_url"`
 	AuthServerName  string `mapstructure:"auth_server_name"`
 	CredentialsName string `mapstructure:"credentials_name"`
+	Headers				[]string `mapstructure:"headers"`
 	Applications `mapstructure:"applications"`
 }
 
@@ -271,7 +274,24 @@ func LoadConfiguration(envPrefix, settingsFilePath, secretsFilePath string, glob
 		return
 	}
 
+	RegisterBeforeAll(MakeAddHeaders(config))
+
 	return
+}
+
+func MakeAddHeaders(config ClientConfiguration) BeforeHandlerFunc {
+	return func(s string, v *viper.Viper, request *gentleman.Request) {
+		logger := log.With().Str("profile", RunConfig.Settings.ProfileName).Logger()
+		for _, header := range config.GetProfile().Headers {
+			parts := strings.SplitN(header, ": ", 1)
+			if len(parts) != 2 {
+				logger.Warn().Err(fmt.Errorf("could not parse header %q", header))
+				continue
+			}
+			logger.Debug().Msgf("adding header %s: %s", parts[0], strings.Repeat("*", len(parts[1])))
+			request.AddHeader(parts[0], parts[1])
+		}
+	}
 }
 
 func (cc *ClientConfiguration) UpdateCredentialsToken(credentialsName string, token *oauth2.Token) error {
@@ -319,6 +339,23 @@ func (cc ClientConfiguration) write(filePath string, updates map[string]interfac
 	return
 }
 
+func (cc ClientConfiguration) delete(filePath string, paths map[string]string) (err error) {
+	v := viper.New()
+
+	v.SetConfigFile(filePath)
+	err = v.ReadInConfig()
+	if err != nil {
+		return
+	}
+
+	for parent, child := range paths {
+		delete(v.Get(parent).(map[string]interface{}), child)
+	}
+
+	err = v.WriteConfig()
+	return
+}
+
 func BuildSettingsCommands() (configCommand *cobra.Command) {
 	configCommand = &cobra.Command{
 		Use:   "settings",
@@ -328,8 +365,115 @@ func BuildSettingsCommands() (configCommand *cobra.Command) {
 		buildSettingsAddAuthServerCommand(),
 		buildSettingsListAuthServersCommand(),
 		buildSettingsGetCommand(),
-		buildSettingsSetCommand())
+		buildSettingsSetCommand(),
+		buildSettingsAddProfileCommand(),
+		buildSettingsListProfilesCommand(),
+		buildSettingsRemoveAuthServerCommand(),
+		buildSettingsRemoveProfileCommand())
 
+	return
+}
+
+func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
+	var authServerName string
+	var credentialsName string
+	cmd = &cobra.Command{
+		Use:   "add-profile <profile-name>",
+		Short: "Add a new profile. This will initialize or update the specified credentials as well.",
+		Args:  cobra.ExactArgs(1),
+		Run:  func(cmd *cobra.Command, args []string) {
+			profileName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("profile", profileName).Logger()
+
+			err := cmd.MarkFlagRequired("credentials-name")
+			if err != nil {
+				logger.Fatal().Err(err)
+			}
+			err = cmd.MarkFlagRequired("auth-server-name")
+			if err != nil {
+				logger.Fatal().Err(err)
+			}
+
+			_, exists := RunConfig.Settings.Profiles[profileName]
+			if exists {
+				logger.Fatal().Msgf("profile %q already exists; try running remove-profile command first", profileName)
+			}
+
+			_, exists = RunConfig.Settings.AuthServers[authServerName]
+			if !exists {
+				logger.Fatal().Msgf("auth server %q does not exist; try running add-auth-server command first", authServerName)
+			}
+
+			handler, ok := AuthHandlers[authServerName]
+			if !ok {
+				logger.Fatal().Msgf("auth server %q oauth2 flow has not been set up", authServerName)
+			}
+
+			token, err := handler.ExecuteFlow(&logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("error while authenticating")
+			}
+			err = RunConfig.UpdateCredentialsToken(credentialsName, token)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("an error occurred writing credentials to file")
+			}
+
+			updates := make(map[string]interface{})
+			updates[fmt.Sprintf("profiles.%s.auth_server_name", profileName)] = authServerName
+			updates[fmt.Sprintf("profiles.%s.credentials_name", profileName)] = credentialsName
+			err = RunConfig.write(RunConfig.settingsPath, updates)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("Failed to write updated settings")
+			}
+		},
+	}
+	cmd.Flags().StringVar(&authServerName, "auth-server-name", "", "auth server associated with new profile")
+	cmd.Flags().StringVar(&credentialsName, "credentials-name", "", "credentials associated with new profile")
+
+	return
+}
+
+func buildSettingsRemoveProfileCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "remove-profile <profile-name>",
+		Short: "Remove a profile. This does not remove the related auth server or credentials.",
+		Args:  cobra.ExactArgs(1),
+		Run:  func(cmd *cobra.Command, args []string) {
+			profileName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("profile", profileName).Logger()
+
+			err := RunConfig.delete(RunConfig.settingsPath, map[string]string{
+				"profiles": profileName,
+			})
+			if err != nil {
+				logger.Fatal().Err(err).Msg("Failed to remove profile")
+			}
+		},
+	}
+	return
+}
+
+func buildSettingsListProfilesCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:     "list-profiles",
+		Short:   "List configured profiles",
+		Args:    cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			profiles := RunConfig.Settings.Profiles
+			if profiles != nil {
+				table := tablewriter.NewWriter(os.Stdout)
+				table.SetHeader([]string{"Name", "Auth server", "Credentials", "API URL"})
+
+				// For each type name, draw a table with the relevant profileName keys
+				for profileName, profile := range profiles {
+					table.Append([]string{profileName, profile.AuthServerName, profile.CredentialsName, profile.ApiURL})
+				}
+				table.Render()
+			} else {
+				fmt.Printf("No profiles configured. Use `%s settings add-profile` to add one.\n", Root.CommandPath())
+			}
+		},
+	}
 	return
 }
 
@@ -337,7 +481,7 @@ func buildSettingsAddAuthServerCommand() (cmd *cobra.Command) {
 	var clientID string
 	var issuer string
 	cmd = &cobra.Command{
-		Use:   "add-auth-server",
+		Use:   "add-auth-server <auth-server-name>",
 		Short: "Add a new authentication server",
 		Args:  cobra.ExactArgs(1),
 		Run:  func(cmd *cobra.Command, args []string) {
@@ -346,21 +490,48 @@ func buildSettingsAddAuthServerCommand() (cmd *cobra.Command) {
 			authServerName := strings.Replace(args[0], ".", "-", -1)
 			_, exists := RunConfig.Settings.AuthServers[authServerName]
 			if exists {
-				logger.Fatal().Msgf("credential %q already exists", authServerName)
+				logger.Fatal().Msgf("auth server %q already exists", authServerName)
+			}
+
+			err := cmd.MarkFlagRequired("client-id")
+			if err != nil {
+				logger.Fatal().Err(err)
+			}
+			err = cmd.MarkFlagRequired("issuer")
+			if err != nil {
+				logger.Fatal().Err(err)
 			}
 
 			updates := make(map[string]interface{})
 			updates[fmt.Sprintf("auth_servers.%s.issuer", authServerName)] = issuer
 			updates[fmt.Sprintf("auth_servers.%s.client_id", authServerName)] = clientID
-			err := RunConfig.write(RunConfig.settingsPath, updates)
+			err = RunConfig.write(RunConfig.settingsPath, updates)
 			if err != nil {
 				logger.Fatal().Err(err).Msg("Failed to write updated settings")
 			}
 		},
 	}
-	cmd.Flags().StringVar(&clientID, "client-id", "", "")
-	cmd.Flags().StringVar(&issuer, "issuer", "", "")
+	cmd.Flags().StringVar(&clientID, "client-id", "", "The client id on behalf of which to issue OAuth2 requests.")
+	cmd.Flags().StringVar(&issuer, "issuer", "", "The issuer, or authorization url, of the credential.")
 
+	return
+}
+
+func buildSettingsRemoveAuthServerCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "remove-auth-server <auth-server-name>",
+		Short: "Remove auth-server. This does not remove any related profiles.",
+		Args:  cobra.ExactArgs(1),
+		Run:  func(cmd *cobra.Command, args []string) {
+			authServerName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("auth server", authServerName).Logger()
+
+			err := RunConfig.delete(RunConfig.settingsPath, map[string]string{"auth_servers": authServerName})
+			if err != nil {
+				logger.Fatal().Err(err).Msg("Failed to remove auth server")
+			}
+		},
+	}
 	return
 }
 

@@ -4,7 +4,6 @@ package main_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -67,10 +67,8 @@ func TestEchoSuccess(t *testing.T) {
 	// Note, `echo-query` has `x-cli-name` set in OAS definition.
 
 	out, err := exec.Command("sh", "-c", "example-cli echo hello: world --api-url http://127.0.0.1:8005 --echo-query=foo --x-request-id bar").CombinedOutput()
-	if err != nil {
-		fmt.Println(string(out))
-		panic(err)
-	}
+	t.Log(string(out))
+	require.NoError(t, err)
 
 	assert.JSONEq(t, "{\"hello\": \"world\", \"q\": \"foo\", \"request-id\": \"bar\"}", string(out))
 }
@@ -80,54 +78,72 @@ func TestConfiguration(t *testing.T) {
 		var out []byte
 		var err error
 		out, err = exec.Command("sh", "-c", "example-cli settings set default_profile_name bogus").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 
 		out, err = exec.Command("sh", "-c", "example-cli settings get default_profile_name").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
-		fmt.Println(string(out))
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Equal(t, "bogus", strings.TrimSpace(string(out)))
 	})
 }
 
 func TestAuth(t *testing.T) {
-	t.Run("can add and list auth servers", func(t *testing.T) {
+	t.Run("can add, remove and list auth servers", func(t *testing.T) {
 		var out []byte
 		var err error
 		out, err = exec.Command("sh", "-c", "example-cli settings add-auth-server auth1 --issuer https://auth.test.sh --client-id 01").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 
 		out, err = exec.Command("sh", "-c", "example-cli settings list-auth-servers").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Contains(t,  string(out),"| auth1   |        01 | https://auth.test.sh |")
+
+		out, err = exec.Command("sh", "-c", "example-cli settings remove-auth-server auth1").CombinedOutput()
+		t.Log(string(out))
+		require.NoError(t, err)
+		assert.NotContains(t,  string(out),"| auth1   |        01 | https://auth.test.sh |")
+	})
+
+	t.Run("can list, parse, and remove credentials", func(t *testing.T) {
+		var out []byte
+		var err error
+		out, err = exec.Command("sh", "-c", "example-cli secrets list-credentials").CombinedOutput()
+		t.Log(string(out))
+		require.NoError(t, err)
+		assert.Contains(t,  string(out),"| default |           |          |")
+		require.Contains(t,  string(out),"| test    | test-cid  | test-iss |")
+
+		out, err = exec.Command("sh", "-c", "example-cli secrets print-claims test").CombinedOutput()
+		t.Log(string(out))
+		require.NoError(t, err)
+		assert.Contains(t, string(out), `"cid": "test-cid"`)
+		assert.Contains(t, string(out), `"iss": "test-iss",`)
+
+		out, err = exec.Command("sh", "-c", "example-cli secrets remove-credentials test").CombinedOutput()
+		t.Log(string(out))
+		require.NoError(t, err)
+
+		out, err = exec.Command("sh", "-c", "example-cli secrets list-credentials").CombinedOutput()
+		t.Log(string(out))
+		require.NoError(t, err)
+		assert.Contains(t,  string(out),"| default |           |        |")
+		assert.NotContains(t,  string(out),"| test    | test-cid  | test-iss |")
 	})
 
 	t.Run("can get and set existing secrets.toml values", func(t *testing.T) {
 		var out []byte
 		var err error
 		out, err = exec.Command("sh", "-c", "example-cli secrets get credentials.default.token_payload.access_token").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Equal(t, "access", strings.TrimSpace(string(out)))
 
 		out, err = exec.Command("sh", "-c", "example-cli secrets get credentials.default.token_payload.refresh_token").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Equal(t, "refresh", strings.TrimSpace(string(out)))
 	})
 
@@ -135,17 +151,13 @@ func TestAuth(t *testing.T) {
 		var out []byte
 		var err error
 		out, err = exec.Command("sh", "-c", "example-cli secrets set credentials.new.token_payload.access_token newAccess").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Equal(t, "", strings.TrimSpace(string(out)))
 
 		out, err = exec.Command("sh", "-c", "example-cli secrets get credentials.new.token_payload.access_token").CombinedOutput()
-		if err != nil {
-			fmt.Println(string(out))
-			panic(err)
-		}
+		t.Log(string(out))
+		require.NoError(t, err)
 		assert.Equal(t, "newAccess", strings.TrimSpace(string(out)))
 	})
 }
@@ -157,6 +169,7 @@ func TestGlobalFlags(t *testing.T) {
 		assert.Contains(t, string(out), "Global Flags:")
 		assert.Contains(t, string(out), "--api-url string")
 		assert.Contains(t, string(out), "--auth-server-name string")
+		assert.Contains(t, string(out), "--headers stringArray")
 		assert.Contains(t, string(out), "--credentials-name string")
 		assert.Contains(t, string(out), "--output-format string")
 		assert.Contains(t, string(out), "--profile-name string")

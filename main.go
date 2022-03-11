@@ -599,9 +599,9 @@ func writeFormattedFile(filename string, data []byte) {
 
 	err := ioutil.WriteFile(filename, formatted, 0600)
 	if errFormat != nil {
-		panic(errFormat)
+		panic(fmt.Errorf("failed to format file %s: %+v", filename, errFormat))
 	} else if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to write file %s: %+v", filename, err))
 	}
 }
 
