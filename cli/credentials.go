@@ -137,8 +137,8 @@ func buildSecretsListCredentialsCommand() (cmd *cobra.Command) {
 func buildSecretsRefreshCredentialsCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "refresh-credentials <profile-name>",
-		Short: "Add a new set of credentials",
-		Args:  cobra.NoArgs,
+		Short: "Refresh credentials associated with specified profile",
+		Args:  cobra.ExactArgs(1),
 		Run:  func(cmd *cobra.Command, args []string) {
 			profileName := strings.Replace(args[0], ".", "-", -1)
 			logger := log.With().Str("profile", profileName).Logger()
@@ -172,7 +172,7 @@ func buildSecretsRefreshCredentialsCommand() (cmd *cobra.Command) {
 func buildSecretsPrintClaimsCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "print-claims <credentials-name>",
-		Short: "Print claims for the specified credentials",
+		Short: "Print claims of the specified credentials",
 		Args:  cobra.ExactArgs(1),
 		Run:  func(cmd *cobra.Command, args []string) {
 			credentialsName := strings.Replace(args[0], ".", "-", -1)
@@ -198,7 +198,7 @@ func buildSecretsPrintClaimsCommand() (cmd *cobra.Command) {
 
 func buildSecretsGetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
-		Use:   "get",
+		Use:   "get <secrets-path>",
 		Short: "Get a value from secrets.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -210,7 +210,7 @@ func buildSecretsGetCommand() (cmd *cobra.Command) {
 
 func buildSecretsSetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
-		Use:   "set",
+		Use:   "set <secrets-path> <value>",
 		Short: "Set a value in secrets.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {

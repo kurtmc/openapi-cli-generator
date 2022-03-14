@@ -594,7 +594,7 @@ func runConfig(filePath string, topLevel interface{}, args []string) {
 
 func buildSettingsGetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
-		Use:   "get",
+		Use:   "get <config-path>",
 		Short: `Get a value from settings.toml using a "." separated path.`,
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -605,7 +605,7 @@ func buildSettingsGetCommand() (cmd *cobra.Command) {
 }
 func buildSettingsSetCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
-		Use:   "set",
+		Use:   "set <config-path> <value>",
 		Short: "Set a value in settings.toml using a \".\" separated path.",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
