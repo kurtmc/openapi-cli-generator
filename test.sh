@@ -33,6 +33,11 @@ cat >$HOME/.example/secrets.toml <<EOL
 access_token = "access"
 refresh_token = "refresh"
 token_type = "Bearer"
+[credentials.test]
+[credentials.test.token_payload]
+access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjIsImNpZCI6InRlc3QtY2lkIiwiaXNzIjoidGVzdC1pc3MifQ.lyeqYKkwCiJNTqnaVwIiiTtb7irfhndkK6z-unll8Oo"
+refresh_token = "refresh"
+token_type = "Bearer"
 EOL
 
 # Run all the tests!

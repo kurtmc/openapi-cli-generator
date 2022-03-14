@@ -19,13 +19,13 @@ import (
 {{ define "params" }}
 	{{- range .OptionalParams }}
 		{{- if eq .Type "boolean" }}
-			cmd.Flags().Bool("{{ .CLIName }}", false, "{{ .Description }}")
+			cmd.Flags().Bool("{{ .CLIName }}", false, "{{ escapeStr .Description }}")
 		{{- else if eq .Type "int64" }}
-			cmd.Flags().Int64("{{ .CLIName }}", 0, "{{ .Description }}")
+			cmd.Flags().Int64("{{ .CLIName }}", 0, "{{ escapeStr .Description }}")
 		{{- else if eq .Type "float64" }}
-			cmd.Flags().Float64("{{ .CLIName }}", 0.0, "{{ .Description }}")
+			cmd.Flags().Float64("{{ .CLIName }}", 0.0, "{{ escapeStr .Description }}")
 		{{- else }}
-			cmd.Flags().String("{{ .CLIName }}", "", "{{ .Description }}")
+			cmd.Flags().String("{{ .CLIName }}", "", "{{ escapeStr .Description }}")
 		{{- end }}
 	{{- end }}
 

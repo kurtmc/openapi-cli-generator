@@ -45,22 +45,23 @@ func BuildSecretsCommands() (cmd *cobra.Command) {
 		buildSecretsAddCredentialsCommand(),
 		buildSecretsListCredentialsCommand(),
 		buildSecretsGetCommand(),
-		buildSecretsSetCommand())
+		buildSecretsSetCommand(),
+		buildSecretsRefreshCredentialsCommand(),
+		buildSecretsRemoveCredentialsCommand(),
+		buildSecretsPrintClaimsCommand())
 
 	return
 }
 
 func buildSecretsAddCredentialsCommand() (cmd *cobra.Command) {
-	var authServerName string
-
 	cmd = &cobra.Command{
-		Use:   "add-credentials",
+		Use:   "add-credentials <credentials-name> <auth-server-name>",
 		Short: "Add a new set of credentials",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ExactArgs(2),
 		Run:  func(cmd *cobra.Command, args []string) {
-			logger := log.With().Str("profile", RunConfig.Settings.ProfileName).Logger()
-
 			credentialName := strings.Replace(args[0], ".", "-", -1)
+			authServerName := strings.Replace(args[1], ".", "-", -1)
+			logger := log.With().Str("credentials-name", credentialName).Logger()
 			_, exists := RunConfig.Secrets.Credentials[credentialName]
 			if exists {
 				logger.Fatal().Msgf("credential %q already exists", credentialName)
@@ -80,8 +81,24 @@ func buildSecretsAddCredentialsCommand() (cmd *cobra.Command) {
 			}
 		},
 	}
-	cmd.Flags().StringVar(&authServerName, "auth-server-name", "", "")
+	return
+}
 
+func buildSecretsRemoveCredentialsCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "remove-credentials <credentials-name>",
+		Short: "Remove credentials. This does not remove any related profiles.",
+		Args:  cobra.ExactArgs(1),
+		Run:  func(cmd *cobra.Command, args []string) {
+			credentialsName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("credentials-name", credentialsName).Logger()
+
+			err := RunConfig.delete(RunConfig.secretsPath, map[string]string{"credentials": credentialsName})
+			if err != nil {
+				logger.Fatal().Err(err).Msg("Failed to write updated settings")
+			}
+		},
+	}
 	return
 }
 
@@ -97,11 +114,82 @@ func buildSecretsListCredentialsCommand() (cmd *cobra.Command) {
 				table.SetHeader([]string{"Name", "Client ID", "Issuer"})
 
 				for credentialName, credential := range credentials {
-					table.Append([]string{credentialName, credential.TokenPayload.ClientID(), credential.TokenPayload.Issuer()})
+					claims, err := credential.TokenPayload.ParseClaimsUnverified()
+					var cid string
+					var iss string
+					if err != nil {
+						log.Debug().Err(err).Msgf("failed to parse credentials %q", credentialName)
+					} else {
+						iss, _ = claims["iss"].(string)
+						cid, _ = claims["cid"].(string)
+					}
+					table.Append([]string{credentialName, cid, iss})
 				}
 				table.Render()
 			} else {
-				fmt.Printf("No credentials configured. Use `%s auth addCredentials` to add one.\n", Root.CommandPath())
+				log.Info().Msgf("No credentials configured. Use `%s auth add-credentials` to add one.\n", Root.CommandPath())
+			}
+		},
+	}
+	return
+}
+
+func buildSecretsRefreshCredentialsCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "refresh-credentials <profile-name>",
+		Short: "Add a new set of credentials",
+		Args:  cobra.NoArgs,
+		Run:  func(cmd *cobra.Command, args []string) {
+			profileName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("profile", profileName).Logger()
+			profile, exists := RunConfig.Settings.Profiles[profileName]
+			if !exists {
+				logger.Fatal().Msgf("profile %q does not exist", profileName)
+			}
+
+			_, exists = RunConfig.Secrets.Credentials[profile.CredentialsName]
+			if !exists {
+				logger.Fatal().Msgf("credential %q does not exist", profile.CredentialsName)
+			}
+
+			handler, ok := AuthHandlers[profile.AuthServerName]
+			if !ok {
+				logger.Fatal().Msgf("auth server %q oauth2 flow has not been set up", profile.AuthServerName)
+			}
+			token, err := handler.ExecuteFlow(&logger)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("error while authenticating")
+			}
+			err = RunConfig.UpdateCredentialsToken(profile.CredentialsName, token)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("an error occurred writing credentials to file")
+			}
+		},
+	}
+	return
+}
+
+func buildSecretsPrintClaimsCommand() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "print-claims <credentials-name>",
+		Short: "Print claims for the specified credentials",
+		Args:  cobra.ExactArgs(1),
+		Run:  func(cmd *cobra.Command, args []string) {
+			credentialsName := strings.Replace(args[0], ".", "-", -1)
+			logger := log.With().Str("credentials-name", credentialsName).Logger()
+
+			credentials, exists := RunConfig.Secrets.Credentials[credentialsName]
+			if !exists {
+				logger.Fatal().Msgf("credential %q does not exist", credentialsName)
+			}
+
+			claims, err := credentials.TokenPayload.ParseClaimsUnverified()
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to parse claims")
+			}
+
+			if err = Formatter.Format(claims); err != nil {
+				log.Fatal().Err(err).Msg("Formatting failed")
 			}
 		},
 	}

@@ -37,6 +37,7 @@ type GlobalFlag struct {
 
 var viperBindPaths = map[string]string{
 	"profile-name": "default_profile_name",
+	"headers": "default_headers",
 }
 
 type GlobalFlagDefaults struct {
@@ -45,7 +46,8 @@ type GlobalFlagDefaults struct {
 	CredentialsName string
 	ApiURL          string
 	OutputFormat    string
-	Verbosity string
+	Verbosity 		string
+	Headers 		[]string
 	Raw             bool
 }
 
@@ -55,7 +57,8 @@ func NewGlobalFlagDefaults(apiURL string) GlobalFlagDefaults {
 		AuthServerName:  "default",
 		CredentialsName: "default",
 		OutputFormat:    "json",
-		Verbosity: "warn",
+		Verbosity: 		 "warn",
+		Headers: 		 make([]string, 0),
 		ApiURL:          apiURL,
 	}
 }
@@ -69,6 +72,7 @@ func MakeAndParseGlobalFlags(defaults GlobalFlagDefaults) (globalFlags []GlobalF
 	flagSet.String("profile-name", defaults.ProfileName, "")
 	flagSet.String("auth-server-name", defaults.AuthServerName, "")
 	flagSet.String("credentials-name", defaults.CredentialsName, "")
+	flagSet.StringArray("headers", defaults.Headers, "Headers to include on outgoing requests. Each header should formatted similar to curl, for instance \"Key: Value\"")
 	flagSet.String("api-url", defaults.ApiURL, "")
 	flagSet.String("verbosity", defaults.Verbosity, "Log verbosity [fatal error warn info debug]")
 	flagSet.StringP("output-format", "o", defaults.OutputFormat, "Output format [json yaml]")
@@ -83,6 +87,10 @@ func MakeAndParseGlobalFlags(defaults GlobalFlagDefaults) (globalFlags []GlobalF
 		{
 			UseDefault: true,
 			Flag:       flagSet.Lookup("profile-name"),
+		}, {
+			UseDefault: true,
+			customGetBindPaths: getBindPathsFromProfile,
+			Flag:       flagSet.Lookup("headers"),
 		}, {
 			UseDefault:         true,
 			customGetBindPaths: getBindPathsFromProfile,
