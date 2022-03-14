@@ -387,11 +387,11 @@ func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
 
 			err := cmd.MarkFlagRequired("credentials-name")
 			if err != nil {
-				logger.Fatal().Err(err)
+				logger.Fatal().Err(err).Msg("must specify credentials-name")
 			}
 			err = cmd.MarkFlagRequired("auth-server-name")
 			if err != nil {
-				logger.Fatal().Err(err)
+				logger.Fatal().Err(err).Msg("must specify auth-server-name")
 			}
 
 			_, exists := RunConfig.Settings.Profiles[profileName]
@@ -495,11 +495,11 @@ func buildSettingsAddAuthServerCommand() (cmd *cobra.Command) {
 
 			err := cmd.MarkFlagRequired("client-id")
 			if err != nil {
-				logger.Fatal().Err(err)
+				logger.Fatal().Err(err).Msg("must specify client-id")
 			}
 			err = cmd.MarkFlagRequired("issuer")
 			if err != nil {
-				logger.Fatal().Err(err)
+				logger.Fatal().Err(err).Msg("must specify issuer")
 			}
 
 			updates := make(map[string]interface{})
