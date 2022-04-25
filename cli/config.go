@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/olekukonko/tablewriter"
-	"github.com/rigetti/openapi-cli-generator/util"
+	"github.com/rigetti/openapi-cli-generator/cli/internal/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -86,10 +86,6 @@ const VerbosityTypeWarn VerbosityType = "warn"
 const VerbosityTypeInfo VerbosityType = "info"
 const VerbosityTypeDebug VerbosityType = "debug"
 
-func (v VerbosityType) MarshalText() (text []byte, err error) {
-	return []byte(v), nil
-}
-
 type CLI struct {
 	Verbosity    VerbosityType `mapstructure:"verbosity"`
 	OutputFormat string        `mapstructure:"output_format"`
@@ -169,10 +165,10 @@ func (p Profile) ToProfileViperKeys(profileName, apiURL string) map[string]inter
 	if p.Applications.CLI.Raw != defaults.Raw {
 		viperKeys[fmt.Sprintf("profiles.%s.raw", profileName)] = p.Applications.CLI.Raw
 	}
-	if p.Applications.CLI.OutputFormat != defaults.OutputFormat {
+	if p.Applications.CLI.OutputFormat != "" && p.Applications.CLI.OutputFormat != defaults.OutputFormat {
 		viperKeys[fmt.Sprintf("profiles.%s.output_format", profileName)] = p.Applications.CLI.OutputFormat
 	}
-	if p.Applications.CLI.Verbosity != VerbosityType(defaults.Verbosity) {
+	if p.Applications.CLI.Verbosity != "" && p.Applications.CLI.Verbosity != VerbosityType(defaults.Verbosity) {
 		viperKeys[fmt.Sprintf("profiles.%s.verbosity", profileName)] = string(p.Applications.CLI.Verbosity)
 	}
 	for key, value := range p.Extra {
@@ -485,7 +481,7 @@ func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
 				}
 			}
 
-			extraMap := make(map[string]string)
+			extraMap := make(map[string]interface{})
 			for _, extra := range extras {
 
 				parts := strings.Split(extra, ": ")
@@ -519,14 +515,16 @@ func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
 				logger.Fatal().Err(err).Msg("an error occurred writing credentials to file")
 			}
 
-			updates := make(map[string]interface{})
-			updates[fmt.Sprintf("profiles.%s.auth_server_name", profileName)] = authServerName
-			updates[fmt.Sprintf("profiles.%s.credentials_name", credentialsName)] = credentialsName
-			updates[fmt.Sprintf("profiles.%s.headers", profileName)] = headers
-			for k, v := range extraMap {
-				updates[fmt.Sprintf("profiles.%s.%s", profileName, k)] = v
+			profile := Profile{
+				ApiURL:          apiURL,
+				AuthServerName:  authServerName,
+				CredentialsName: credentialsName,
+				Headers:         headers,
+				Extra:           extraMap,
+				Applications:    Applications{},
 			}
-			err = RunConfig.write(RunConfig.settingsPath, updates)
+
+			err = RunConfig.write(RunConfig.settingsPath, profile.ToProfileViperKeys(profileName, ""))
 			if err != nil {
 				logger.Fatal().Err(err).Msg("Failed to write updated settings")
 			}
