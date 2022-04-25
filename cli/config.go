@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/olekukonko/tablewriter"
+	"github.com/rigetti/openapi-cli-generator/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -377,15 +378,28 @@ func (cc ClientConfiguration) write(filePath string, updates map[string]interfac
 	v.SetConfigFile(filePath)
 	err = v.ReadInConfig()
 	if err != nil {
-		return
+		return err
 	}
 
 	for path, value := range updates {
 		v.Set(path, value)
 	}
 
+	remove, restore, err := util.BackupFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to backup %q before writing update: %+v", filePath, err)
+	}
+
 	err = v.WriteConfig()
-	return
+
+	if err != nil {
+		restoreErr := restore()
+		if restoreErr != nil {
+			err = fmt.Errorf("failed to restore %q after %+v: %+v", filePath, err, restoreErr)
+		}
+		return err
+	}
+	return remove()
 }
 
 func (cc ClientConfiguration) delete(filePath string, paths map[string]string) (err error) {
@@ -401,8 +415,21 @@ func (cc ClientConfiguration) delete(filePath string, paths map[string]string) (
 		delete(v.Get(parent).(map[string]interface{}), child)
 	}
 
+	remove, restore, err := util.BackupFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to backup %q before writing update: %+v", filePath, err)
+	}
+
 	err = v.WriteConfig()
-	return
+
+	if err != nil {
+		restoreErr := restore()
+		if restoreErr != nil {
+			err = fmt.Errorf("failed to restore %q after %+v: %+v", filePath, err, restoreErr)
+		}
+		return err
+	}
+	return remove()
 }
 
 func BuildSettingsCommands() (configCommand *cobra.Command) {
