@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/olekukonko/tablewriter"
+	"github.com/rigetti/openapi-cli-generator/cli/internal/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"
@@ -128,7 +129,52 @@ type Profile struct {
 	AuthServerName  string `mapstructure:"auth_server_name"`
 	CredentialsName string `mapstructure:"credentials_name"`
 	Headers				[]string `mapstructure:"headers"`
+	Extra           map[string]interface{} `mapstructure:",remain"`
 	Applications `mapstructure:"applications"`
+}
+
+// ToProfileViperKeys returns a map of Viper keys to values for this profile. It includes
+// the top-level profile.{profileName} prefix, which is what Viper will use when
+// (un)marshalling Settings. Note, this includes embedding all of the key value pairs
+// in Profile.Extra. It does not include any field that is set to its default value.
+// Why is this needed? First, mapstructure.Decode will inaccurately nest key value
+// pairs in Profile.Extra under an "Extra" key. Second, viper.WriteConfig
+// will return the following error on custom string fields, such as VerbosityType, during
+// TOML marshalling:
+// While marshaling config: cannot convert type cli.VerbosityType to Tree
+// To side step these issues, we provide this as a convenience method for representing
+// a profile as a map of Viper keys and values. Clients can then pass the returned map
+// to ClientConfiguration.WriteSettings.
+func (p Profile) ToProfileViperKeys(profileName, apiURL string) map[string]interface{} {
+	defaults := NewGlobalFlagDefaults("")
+
+	viperKeys := make(map[string]interface{})
+
+	if p.ApiURL != defaults.ApiURL {
+		viperKeys[fmt.Sprintf("profiles.%s.api_url", profileName)] = p.ApiURL
+	}
+	if p.CredentialsName != defaults.CredentialsName {
+		viperKeys[fmt.Sprintf("profiles.%s.credentials_name", profileName)] = p.CredentialsName
+	}
+	if p.AuthServerName != defaults.AuthServerName {
+		viperKeys[fmt.Sprintf("profiles.%s.auth_server_name", profileName)] = p.AuthServerName
+	}
+	if len(p.Headers) != 0 {
+		viperKeys[fmt.Sprintf("profiles.%s.headers", profileName)] = p.Headers
+	}
+	if p.Applications.CLI.Raw != defaults.Raw {
+		viperKeys[fmt.Sprintf("profiles.%s.raw", profileName)] = p.Applications.CLI.Raw
+	}
+	if p.Applications.CLI.OutputFormat != "" && p.Applications.CLI.OutputFormat != defaults.OutputFormat {
+		viperKeys[fmt.Sprintf("profiles.%s.output_format", profileName)] = p.Applications.CLI.OutputFormat
+	}
+	if p.Applications.CLI.Verbosity != "" && p.Applications.CLI.Verbosity != VerbosityType(defaults.Verbosity) {
+		viperKeys[fmt.Sprintf("profiles.%s.verbosity", profileName)] = string(p.Applications.CLI.Verbosity)
+	}
+	for key, value := range p.Extra {
+		viperKeys[fmt.Sprintf("profiles.%s.%s", profileName, key)] = value
+	}
+	return viperKeys
 }
 
 type Settings struct {
@@ -311,14 +357,14 @@ func (cc *ClientConfiguration) UpdateCredentialsToken(credentialsName string, to
 	updates[fmt.Sprintf("credentials.%s.token_payload.id_token", credentialsName)] = tokenPayload.IDToken
 	updates[fmt.Sprintf("credentials.%s.token_payload.token_type", credentialsName)] = tokenPayload.TokenType
 
-	return cc.writeSecrets(updates)
+	return cc.WriteSecrets(updates)
 }
 
-func (cc ClientConfiguration) writeSettings(updates map[string]interface{}) (err error) {
+func (cc ClientConfiguration) WriteSettings(updates map[string]interface{}) (err error) {
 	return cc.write(cc.settingsPath, updates)
 }
 
-func (cc ClientConfiguration) writeSecrets(updates map[string]interface{}) (err error) {
+func (cc ClientConfiguration) WriteSecrets(updates map[string]interface{}) (err error) {
 	return cc.write(cc.secretsPath, updates)
 }
 
@@ -328,15 +374,28 @@ func (cc ClientConfiguration) write(filePath string, updates map[string]interfac
 	v.SetConfigFile(filePath)
 	err = v.ReadInConfig()
 	if err != nil {
-		return
+		return err
 	}
 
 	for path, value := range updates {
 		v.Set(path, value)
 	}
 
+	remove, restore, err := util.BackupFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to backup %q before writing update: %+v", filePath, err)
+	}
+
 	err = v.WriteConfig()
-	return
+
+	if err != nil {
+		restoreErr := restore()
+		if restoreErr != nil {
+			err = fmt.Errorf("failed to restore %q after %+v: %+v", filePath, err, restoreErr)
+		}
+		return err
+	}
+	return remove()
 }
 
 func (cc ClientConfiguration) delete(filePath string, paths map[string]string) (err error) {
@@ -352,8 +411,21 @@ func (cc ClientConfiguration) delete(filePath string, paths map[string]string) (
 		delete(v.Get(parent).(map[string]interface{}), child)
 	}
 
+	remove, restore, err := util.BackupFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to backup %q before writing update: %+v", filePath, err)
+	}
+
 	err = v.WriteConfig()
-	return
+
+	if err != nil {
+		restoreErr := restore()
+		if restoreErr != nil {
+			err = fmt.Errorf("failed to restore %q after %+v: %+v", filePath, err, restoreErr)
+		}
+		return err
+	}
+	return remove()
 }
 
 func BuildSettingsCommands() (configCommand *cobra.Command) {
@@ -375,8 +447,12 @@ func BuildSettingsCommands() (configCommand *cobra.Command) {
 }
 
 func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
+	var apiURL string
 	var authServerName string
 	var credentialsName string
+	var headers []string
+	var extras []string
+
 	cmd = &cobra.Command{
 		Use:   "add-profile <profile-name>",
 		Short: "Add a new profile. This will initialize or update the specified credentials as well.",
@@ -392,6 +468,27 @@ func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
 			err = cmd.MarkFlagRequired("auth-server-name")
 			if err != nil {
 				logger.Fatal().Err(err).Msg("must specify auth-server-name")
+			}
+			err = cmd.MarkFlagRequired("api-url")
+			if err != nil {
+				logger.Fatal().Err(err).Msg("must specify api-url")
+			}
+
+			for _, header := range headers {
+				parts := strings.Split(header, ": ")
+				if len(parts) != 2 {
+					logger.Fatal().Msgf("%q is not in %q format", header, "Header: value")
+				}
+			}
+
+			extraMap := make(map[string]interface{})
+			for _, extra := range extras {
+
+				parts := strings.Split(extra, ": ")
+				if len(parts) != 2 {
+					logger.Fatal().Msgf("%q is not in %q format", extra, "key: value")
+				}
+				extraMap[parts[0]] = parts[1]
 			}
 
 			_, exists := RunConfig.Settings.Profiles[profileName]
@@ -418,17 +515,34 @@ func buildSettingsAddProfileCommand() (cmd *cobra.Command) {
 				logger.Fatal().Err(err).Msg("an error occurred writing credentials to file")
 			}
 
-			updates := make(map[string]interface{})
-			updates[fmt.Sprintf("profiles.%s.auth_server_name", profileName)] = authServerName
-			updates[fmt.Sprintf("profiles.%s.credentials_name", profileName)] = credentialsName
-			err = RunConfig.write(RunConfig.settingsPath, updates)
+			profile := Profile{
+				ApiURL:          apiURL,
+				AuthServerName:  authServerName,
+				CredentialsName: credentialsName,
+				Headers:         headers,
+				Extra:           extraMap,
+				Applications:    Applications{},
+			}
+
+			err = RunConfig.write(RunConfig.settingsPath, profile.ToProfileViperKeys(profileName, ""))
 			if err != nil {
 				logger.Fatal().Err(err).Msg("Failed to write updated settings")
 			}
 		},
 	}
-	cmd.Flags().StringVar(&authServerName, "auth-server-name", "", "auth server associated with new profile")
-	cmd.Flags().StringVar(&credentialsName, "credentials-name", "", "credentials associated with new profile")
+	cmd.Flags().StringVar(&apiURL, "api-url", "", "API base URL for all requests made with profile")
+	cmd.Flags().StringVar(&authServerName, "auth-server-name", "", "auth server name against which to authenticate")
+	cmd.Flags().StringVar(&credentialsName, "credentials-name", "", "credentials to authenticate requests")
+	cmd.Flags().StringSliceVar(
+		&headers,
+		"headers",
+		nil,
+		"headers to add to all requests provided in \"Header: value\" format")
+	cmd.Flags().StringSliceVar(
+		&extras,
+		"extras",
+		nil,
+		"extra fields provided in \"key: value\" format")
 
 	return
 }
@@ -462,11 +576,22 @@ func buildSettingsListProfilesCommand() (cmd *cobra.Command) {
 			profiles := RunConfig.Settings.Profiles
 			if profiles != nil {
 				table := tablewriter.NewWriter(os.Stdout)
-				table.SetHeader([]string{"Name", "Auth server", "Credentials", "API URL"})
+				table.SetHeader([]string{"Name", "Auth server", "Credentials", "API URL", "Headers", "Extras"})
 
 				// For each type name, draw a table with the relevant profileName keys
 				for profileName, profile := range profiles {
-					table.Append([]string{profileName, profile.AuthServerName, profile.CredentialsName, profile.ApiURL})
+					extras := make([]string, 0)
+					for key, value := range profile.Extra {
+						extras = append(extras, fmt.Sprintf("%s=%v", key, value))
+					}
+					table.Append([]string{
+						profileName,
+						profile.AuthServerName,
+						profile.CredentialsName,
+						profile.ApiURL,
+						strings.Join(profile.Headers, ", "),
+						strings.Join(extras, ", "),
+					})
 				}
 				table.Render()
 			} else {
