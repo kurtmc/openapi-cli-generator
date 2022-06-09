@@ -26,6 +26,10 @@ type AuthHandler interface {
 	OnRequest(log *zerolog.Logger, request *http.Request) error
 }
 
+type OAuthHandler interface {
+	NewToken() (token *oauth2.Token, err error)
+}
+
 // AuthHandlers is the map of registered auth type names to handlers
 var AuthHandlers = make(map[string]AuthHandler)
 
@@ -58,7 +62,7 @@ func buildSecretsAddCredentialsCommand() (cmd *cobra.Command) {
 		Use:   "add-credentials <credentials-name> <auth-server-name>",
 		Short: "Add a new set of credentials",
 		Args:  cobra.ExactArgs(2),
-		Run:  func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			credentialName := strings.Replace(args[0], ".", "-", -1)
 			authServerName := strings.Replace(args[1], ".", "-", -1)
 			logger := log.With().Str("credentials-name", credentialName).Logger()
@@ -71,10 +75,16 @@ func buildSecretsAddCredentialsCommand() (cmd *cobra.Command) {
 			if !ok {
 				logger.Fatal().Msgf("auth server %q oauth2 flow has not been set up", authServerName)
 			}
-			token, err := handler.ExecuteFlow(&logger)
+			oauthHandler, ok := handler.(OAuthHandler)
+			if !ok {
+				logger.Fatal().Msgf("auth server %q does not support an OAuth2 flow", authServerName)
+			}
+
+			token, err := oauthHandler.NewToken()
 			if err != nil {
 				logger.Fatal().Err(err).Msg("error while authenticating")
 			}
+
 			err = RunConfig.UpdateCredentialsToken(credentialName, token)
 			if err != nil {
 				logger.Fatal().Err(err).Msg("an error occurred writing credentials to file")
@@ -89,7 +99,7 @@ func buildSecretsRemoveCredentialsCommand() (cmd *cobra.Command) {
 		Use:   "remove-credentials <credentials-name>",
 		Short: "Remove credentials. This does not remove any related profiles.",
 		Args:  cobra.ExactArgs(1),
-		Run:  func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			credentialsName := strings.Replace(args[0], ".", "-", -1)
 			logger := log.With().Str("credentials-name", credentialsName).Logger()
 
@@ -104,9 +114,9 @@ func buildSecretsRemoveCredentialsCommand() (cmd *cobra.Command) {
 
 func buildSecretsListCredentialsCommand() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
-		Use:     "list-credentials",
-		Short:   "List available credentials",
-		Args:    cobra.NoArgs,
+		Use:   "list-credentials",
+		Short: "List available credentials",
+		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			credentials := RunConfig.Secrets.Credentials
 			if credentials != nil {
@@ -139,7 +149,7 @@ func buildSecretsRefreshCredentialsCommand() (cmd *cobra.Command) {
 		Use:   "refresh-credentials <profile-name>",
 		Short: "Refresh credentials associated with specified profile",
 		Args:  cobra.ExactArgs(1),
-		Run:  func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			profileName := strings.Replace(args[0], ".", "-", -1)
 			logger := log.With().Str("profile", profileName).Logger()
 			profile, exists := RunConfig.Settings.Profiles[profileName]
@@ -174,7 +184,7 @@ func buildSecretsPrintClaimsCommand() (cmd *cobra.Command) {
 		Use:   "print-claims <credentials-name>",
 		Short: "Print claims of the specified credentials",
 		Args:  cobra.ExactArgs(1),
-		Run:  func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			credentialsName := strings.Replace(args[0], ".", "-", -1)
 			logger := log.With().Str("credentials-name", credentialsName).Logger()
 

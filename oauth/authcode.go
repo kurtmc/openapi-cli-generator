@@ -15,8 +15,8 @@ import (
 
 	"context"
 
-	"github.com/rigetti/openapi-cli-generator/cli"
 	"github.com/google/uuid"
+	"github.com/rigetti/openapi-cli-generator/cli"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"
@@ -192,6 +192,31 @@ type AuthCodeHandler struct {
 // ProfileKeys returns the key names for fields to store in the profile.
 func (h *AuthCodeHandler) ProfileKeys() []string {
 	return h.Keys
+}
+
+// NewToken bypasses any cache to obtain a new OAuth2 token. In this particular
+// case we initialize a RefreshTokenSource without a refresh token. This will
+// force the client through an initial authorization code flow. This may be
+// desirable when creating a new set of credentials or over-writing a different
+// set of credentials.
+func (h *AuthCodeHandler) NewToken() (*oauth2.Token, error) {
+	params := url.Values{}
+
+	source := &AuthorizationCodeTokenSource{
+		ClientID:       h.ClientID,
+		AuthorizeURL:   h.AuthorizeURL,
+		TokenURL:       h.TokenURL,
+		RedirectURI:    h.RedirectURI,
+		EndpointParams: &params,
+		Scopes:         h.Scopes,
+	}
+
+	return RefreshTokenSource{
+		ClientID:       h.ClientID,
+		TokenURL:       h.TokenURL,
+		EndpointParams: &params,
+		TokenSource:    source,
+	}.Token()
 }
 
 func (h *AuthCodeHandler) getRefreshTokenSource(log *zerolog.Logger) RefreshTokenSource {
