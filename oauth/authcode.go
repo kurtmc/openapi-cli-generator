@@ -16,7 +16,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/rigetti/openapi-cli-generator/cli"
+	"github.com/kurtmc/openapi-cli-generator/cli"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2"

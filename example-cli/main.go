@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/rigetti/openapi-cli-generator/cli"
+	"github.com/kurtmc/openapi-cli-generator/cli"
 )
 
 func main() {

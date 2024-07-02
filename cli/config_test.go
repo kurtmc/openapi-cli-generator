@@ -24,7 +24,7 @@ func TestConfig(t *testing.T) {
 			ProfileName: "default",
 			Profiles:           map[string]Profile{
 				"tester": {
-					ApiURL: "https://api.dev.qcs.rigetti.com",
+					ApiURL: "https://api.dev.qcs.kurtmc.com",
 				},
 			},
 			AuthServers:        nil,

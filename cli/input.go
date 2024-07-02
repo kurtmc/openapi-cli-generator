@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rigetti/openapi-cli-generator/shorthand"
+	"github.com/kurtmc/openapi-cli-generator/shorthand"
 	"github.com/rs/zerolog/log"
 	yaml "gopkg.in/yaml.v2"
 )

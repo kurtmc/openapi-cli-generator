@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/olekukonko/tablewriter"
-	"github.com/rigetti/openapi-cli-generator/cli/internal/util"
+	"github.com/kurtmc/openapi-cli-generator/cli/internal/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cast"

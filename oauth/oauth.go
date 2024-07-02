@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/rigetti/openapi-cli-generator/cli"
+	"github.com/kurtmc/openapi-cli-generator/cli"
 	"github.com/rs/zerolog"
 	"golang.org/x/oauth2"
 	"gopkg.in/h2non/gentleman.v2/context"
